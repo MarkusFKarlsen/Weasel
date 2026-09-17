@@ -9,6 +9,7 @@ use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use weasel::db::{Database, RunRecord};
+use weasel::sweep::Sweep;
 use weasel::{
     Config, DEFAULT_CHARSET, DEFAULT_MUTATION_RATE, DEFAULT_OFFSPRING, DEFAULT_TARGET,
     dedup_charset, random_string, run,
@@ -33,23 +34,25 @@ struct Args {
     #[arg(short, long, default_value = DEFAULT_CHARSET)]
     charset: String,
 
-    /// Mutated copies (offspring) produced per generation
-    #[arg(short = 'n', long, default_value_t = DEFAULT_OFFSPRING)]
-    offspring: usize,
+    /// Mutated copies (offspring) produced per generation. Accepts a sweep:
+    /// a comma-separated list of values and/or inclusive start:end:step ranges, e.g. 10:100:10,500
+    #[arg(short = 'n', long, default_value_t = Sweep(vec![DEFAULT_OFFSPRING]))]
+    offspring: Sweep<usize>,
 
-    /// Per-character mutation probability, in (0, 1]
-    #[arg(short, long, default_value_t = DEFAULT_MUTATION_RATE)]
-    mutation_rate: f64,
+    /// Per-character mutation probability, in (0, 1]. Accepts a sweep like --offspring,
+    /// e.g. 0.01:0.1:0.01
+    #[arg(short, long, default_value_t = Sweep(vec![DEFAULT_MUTATION_RATE]))]
+    mutation_rate: Sweep<f64>,
 
     /// Give up after this many generations
     #[arg(long)]
     max_generations: Option<u64>,
 
-    /// RNG seed for reproducible runs (random if omitted); run i uses seed + i
+    /// RNG seed for reproducible runs (random if omitted); run i of each combination uses seed + i
     #[arg(short, long)]
     seed: Option<u64>,
 
-    /// Number of independent runs to perform
+    /// Number of independent runs per offspring/mutation-rate combination
     #[arg(short, long, default_value_t = 1)]
     runs: u64,
 
@@ -82,8 +85,16 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     let charset = dedup_charset(args.charset.chars());
     let db = args.db.as_ref().map(Database::open).transpose()?;
 
-    // Run i gets its own RNG seeded with base_seed + i, so results don't depend on thread count.
-    let make_run = |i: u64| {
+    let combos: Vec<(usize, f64)> = args
+        .offspring
+        .0
+        .iter()
+        .flat_map(|&n| args.mutation_rate.0.iter().map(move |&m| (n, m)))
+        .collect();
+
+    // Run i of every combination gets its own RNG seeded with base_seed + i, so results don't
+    // depend on thread count, and each combination faces the same targets when using --length.
+    let make_run = |(offspring, mutation_rate): (usize, f64), i: u64| {
         let seed = base_seed.wrapping_add(i);
         let mut rng = StdRng::seed_from_u64(seed);
         let target = match args.length {
@@ -93,20 +104,33 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
         let config = Config {
             target,
             charset: charset.clone(),
-            offspring: args.offspring,
-            mutation_rate: args.mutation_rate,
+            offspring,
+            mutation_rate,
             max_generations: args.max_generations,
         };
         (seed, rng, config)
     };
-    // Runs differ only in seed (and random target contents), so one check covers them all.
-    make_run(0).2.validate()?;
+    // Within a combination, runs differ only in seed (and random target contents),
+    // so checking one run per combination covers them all.
+    for &combo in &combos {
+        make_run(combo, 0).2.validate()?;
+    }
+    let total_runs = args
+        .runs
+        .checked_mul(combos.len() as u64)
+        .ok_or("too many runs")?;
+    if combos.len() > 1 && args.max_generations.is_none() {
+        eprintln!(
+            "warning: sweeping without --max-generations; low offspring with high mutation \
+             rates may never reach the target"
+        );
+    }
 
     let threads = args
         .threads
         .or_else(|| thread::available_parallelism().ok())
         .map_or(1, NonZeroUsize::get)
-        .min(usize::try_from(args.runs).unwrap_or(usize::MAX))
+        .min(usize::try_from(total_runs).unwrap_or(usize::MAX))
         .max(1);
     // Per-generation output from several threads would be interleaved.
     let verbose = !args.quiet && threads == 1;
@@ -117,14 +141,17 @@ fn try_main() -> Result<(), Box<dyn std::error::Error>> {
     thread::scope(|s| {
         for _ in 0..threads {
             let tx = tx.clone();
-            let (next_run, make_run) = (&next_run, &make_run);
+            let (next_run, make_run, combos) = (&next_run, &make_run, &combos);
             s.spawn(move || {
                 loop {
-                    let i = next_run.fetch_add(1, Ordering::Relaxed);
-                    if i >= args.runs {
+                    let job = next_run.fetch_add(1, Ordering::Relaxed);
+                    if job >= total_runs {
                         break;
                     }
-                    let record = execute_run(make_run(i), verbose);
+                    // Cycle through the combinations so partial results cover all of them.
+                    let n = combos.len() as u64;
+                    let combo = combos[(job % n) as usize];
+                    let record = execute_run(make_run(combo, job / n), verbose);
                     // The receiver is gone only if writing to the database failed.
                     if tx.send(record).is_err() {
                         break;
@@ -161,12 +188,13 @@ fn execute_run((seed, mut rng, config): (u64, StdRng, Config), verbose: bool) ->
     .expect("config was validated");
     let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
 
+    let label = format!("seed {seed}, n={}, m={}", config.offspring, config.mutation_rate);
     let summary = if result.reached_target {
-        format!("seed {seed}: reached target in {} generations", result.generations)
+        format!("{label}: reached target in {} generations", result.generations)
     } else {
         let best: String = result.best.iter().collect();
         format!(
-            "seed {seed}: stopped after {} generations; best {best:?} ({}/{width})",
+            "{label}: stopped after {} generations; best {best:?} ({}/{width})",
             result.generations, result.fitness
         )
     };

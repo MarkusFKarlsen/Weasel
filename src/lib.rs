@@ -6,6 +6,7 @@
 //! target in the most positions becomes the next parent.
 
 pub mod db;
+pub mod sweep;
 
 use rand::seq::IndexedRandom;
 use rand::{Rng, RngExt};

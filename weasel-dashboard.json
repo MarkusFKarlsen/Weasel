@@ -1,0 +1,903 @@
+{
+  "uid": "weasel-sweep",
+  "title": "Weasel \u2014 Parameter Sweep Analysis",
+  "description": "Cumulative selection: generations-to-target vs length, charset size, offspring and mutation rate.",
+  "tags": [
+    "weasel",
+    "sqlite"
+  ],
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Overview",
+      "type": "stat",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Row count, overall success rate and combination count for the selected batch.",
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT COUNT(*) AS \"Runs\",\n       ROUND(AVG(reached_target)*100,2) AS \"Success %\",\n       COUNT(DISTINCT target_length||'/'||charset_size||'/'||offspring||'/'||mutation_rate) AS \"Combos\"\nFROM runs WHERE batch_id = $batch;",
+          "rawQueryText": "SELECT COUNT(*) AS \"Runs\",\n       ROUND(AVG(reached_target)*100,2) AS \"Success %\",\n       COUNT(DISTINCT target_length||'/'||charset_size||'/'||offspring||'/'||mutation_rate) AS \"Combos\"\nFROM runs WHERE batch_id = $batch;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Batches",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "NULL finished_at means the batch was interrupted or failed.",
+      "gridPos": {
+        "h": 4,
+        "w": 16,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT id AS \"Batch\", COALESCE(label,'(none)') AS \"Label\",\n       combos AS \"Combos\", runs_per_combo AS \"Runs/combo\", seed AS \"Seed\",\n       CASE WHEN finished_at IS NULL THEN 'INTERRUPTED'\n            ELSE ROUND((finished_at-started_at)/1000.0,1)||' s' END AS \"Duration\"\nFROM batches ORDER BY id DESC;",
+          "rawQueryText": "SELECT id AS \"Batch\", COALESCE(label,'(none)') AS \"Label\",\n       combos AS \"Combos\", runs_per_combo AS \"Runs/combo\", seed AS \"Seed\",\n       CASE WHEN finished_at IS NULL THEN 'INTERRUPTED'\n            ELSE ROUND((finished_at-started_at)/1000.0,1)||' s' END AS \"Duration\"\nFROM batches ORDER BY id DESC;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Sweep progress (runs completed)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "10-second buckets. Updates live while a sweep runs (WAL mode). Widen the time range if empty.",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT (started_at/10000)*10000 AS time, COUNT(*) AS \"runs\"\nFROM runs WHERE batch_id = $batch GROUP BY 1 ORDER BY 1;",
+          "rawQueryText": "SELECT (started_at/10000)*10000 AS time, COUNT(*) AS \"runs\"\nFROM runs WHERE batch_id = $batch GROUP BY 1 ORDER BY 1;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "time series"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "axisPlacement": "auto",
+            "showPoints": "never"
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Success rate \u2014 offspring x mutation rate",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Fraction of runs reaching the target. The diagonal boundary is the error threshold.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT offspring AS \"n\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.01 THEN reached_target END),3) AS \"0.01\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.02 THEN reached_target END),3) AS \"0.02\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.03 THEN reached_target END),3) AS \"0.03\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.04 THEN reached_target END),3) AS \"0.04\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.05 THEN reached_target END),3) AS \"0.05\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.07 THEN reached_target END),3) AS \"0.07\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.1 THEN reached_target END),3) AS \"0.1\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.13 THEN reached_target END),3) AS \"0.13\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.16 THEN reached_target END),3) AS \"0.16\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.2 THEN reached_target END),3) AS \"0.2\"\nFROM runs WHERE batch_id = $batch AND charset_size = $k\nGROUP BY 1 ORDER BY 1;",
+          "rawQueryText": "SELECT offspring AS \"n\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.01 THEN reached_target END),3) AS \"0.01\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.02 THEN reached_target END),3) AS \"0.02\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.03 THEN reached_target END),3) AS \"0.03\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.04 THEN reached_target END),3) AS \"0.04\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.05 THEN reached_target END),3) AS \"0.05\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.07 THEN reached_target END),3) AS \"0.07\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.1 THEN reached_target END),3) AS \"0.1\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.13 THEN reached_target END),3) AS \"0.13\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.16 THEN reached_target END),3) AS \"0.16\",\n  ROUND(AVG(CASE WHEN mutation_rate=0.2 THEN reached_target END),3) AS \"0.2\"\nFROM runs WHERE batch_id = $batch AND charset_size = $k\nGROUP BY 1 ORDER BY 1;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "gradient"
+            },
+            "filterable": false
+          },
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "decimals": 3
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "n"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Mean generations \u2014 length x mutation rate (converged cells only)",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Blank cells are censored (not every run converged) and are excluded rather than shown misleadingly. The valley is the optimal mutation rate.",
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "WITH ok AS (\n  SELECT target_length, mutation_rate, 1 AS okflag\n  FROM runs WHERE batch_id = $batch AND charset_size = $k AND offspring = $n\n  GROUP BY 1,2 HAVING AVG(reached_target) = 1.0\n)\nSELECT r.target_length AS \"L\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.01 AND ok.okflag=1 THEN r.generations END),1) AS \"0.01\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.02 AND ok.okflag=1 THEN r.generations END),1) AS \"0.02\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.03 AND ok.okflag=1 THEN r.generations END),1) AS \"0.03\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.04 AND ok.okflag=1 THEN r.generations END),1) AS \"0.04\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.05 AND ok.okflag=1 THEN r.generations END),1) AS \"0.05\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.07 AND ok.okflag=1 THEN r.generations END),1) AS \"0.07\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.1 AND ok.okflag=1 THEN r.generations END),1) AS \"0.1\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.13 AND ok.okflag=1 THEN r.generations END),1) AS \"0.13\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.16 AND ok.okflag=1 THEN r.generations END),1) AS \"0.16\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.2 AND ok.okflag=1 THEN r.generations END),1) AS \"0.2\"\nFROM runs r LEFT JOIN ok ON ok.target_length = r.target_length AND ok.mutation_rate = r.mutation_rate\nWHERE r.batch_id = $batch AND r.charset_size = $k AND r.offspring = $n\nGROUP BY 1 ORDER BY 1;",
+          "rawQueryText": "WITH ok AS (\n  SELECT target_length, mutation_rate, 1 AS okflag\n  FROM runs WHERE batch_id = $batch AND charset_size = $k AND offspring = $n\n  GROUP BY 1,2 HAVING AVG(reached_target) = 1.0\n)\nSELECT r.target_length AS \"L\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.01 AND ok.okflag=1 THEN r.generations END),1) AS \"0.01\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.02 AND ok.okflag=1 THEN r.generations END),1) AS \"0.02\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.03 AND ok.okflag=1 THEN r.generations END),1) AS \"0.03\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.04 AND ok.okflag=1 THEN r.generations END),1) AS \"0.04\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.05 AND ok.okflag=1 THEN r.generations END),1) AS \"0.05\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.07 AND ok.okflag=1 THEN r.generations END),1) AS \"0.07\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.1 AND ok.okflag=1 THEN r.generations END),1) AS \"0.1\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.13 AND ok.okflag=1 THEN r.generations END),1) AS \"0.13\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.16 AND ok.okflag=1 THEN r.generations END),1) AS \"0.16\",\n  ROUND(AVG(CASE WHEN r.mutation_rate=0.2 AND ok.okflag=1 THEN r.generations END),1) AS \"0.2\"\nFROM runs r LEFT JOIN ok ON ok.target_length = r.target_length AND ok.mutation_rate = r.mutation_rate\nWHERE r.batch_id = $batch AND r.charset_size = $k AND r.offspring = $n\nGROUP BY 1 ORDER BY 1;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "gradient"
+            },
+            "filterable": false
+          },
+          "color": {
+            "mode": "continuous-GrYlRd"
+          },
+          "decimals": 1
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "L"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "title": "Optimal mutation rate per length",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "m x L stays near 1.2 at k=27 \u2014 roughly one mutation per copy.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "WITH c AS (\n  SELECT target_length L, mutation_rate m, AVG(generations) g\n  FROM runs WHERE batch_id = $batch AND charset_size = $k AND offspring = $n\n  GROUP BY 1,2 HAVING AVG(reached_target) = 1.0\n)\nSELECT L AS \"L\", m AS \"best m\", ROUND(m*L,2) AS \"m x L\", ROUND(g,1) AS \"gens\"\nFROM c WHERE g = (SELECT MIN(g) FROM c c2 WHERE c2.L = c.L) ORDER BY L;",
+          "rawQueryText": "WITH c AS (\n  SELECT target_length L, mutation_rate m, AVG(generations) g\n  FROM runs WHERE batch_id = $batch AND charset_size = $k AND offspring = $n\n  GROUP BY 1,2 HAVING AVG(reached_target) = 1.0\n)\nSELECT L AS \"L\", m AS \"best m\", ROUND(m*L,2) AS \"m x L\", ROUND(g,1) AS \"gens\"\nFROM c WHERE g = (SELECT MIN(g) FROM c c2 WHERE c2.L = c.L) ORDER BY L;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Error threshold (highest m with >=99% success)",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Tolerable mutation load grows roughly with ln(n).",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT target_length AS \"L\",\n  MAX(CASE WHEN offspring=5 THEN mutation_rate END) AS \"n=5\",\n  MAX(CASE WHEN offspring=10 THEN mutation_rate END) AS \"n=10\",\n  MAX(CASE WHEN offspring=25 THEN mutation_rate END) AS \"n=25\",\n  MAX(CASE WHEN offspring=50 THEN mutation_rate END) AS \"n=50\",\n  MAX(CASE WHEN offspring=100 THEN mutation_rate END) AS \"n=100\"\nFROM (SELECT target_length, offspring, mutation_rate FROM runs\n      WHERE batch_id = $batch AND charset_size = $k\n      GROUP BY 1,2,3 HAVING AVG(reached_target) >= 0.99)\nGROUP BY 1 ORDER BY 1;",
+          "rawQueryText": "SELECT target_length AS \"L\",\n  MAX(CASE WHEN offspring=5 THEN mutation_rate END) AS \"n=5\",\n  MAX(CASE WHEN offspring=10 THEN mutation_rate END) AS \"n=10\",\n  MAX(CASE WHEN offspring=25 THEN mutation_rate END) AS \"n=25\",\n  MAX(CASE WHEN offspring=50 THEN mutation_rate END) AS \"n=50\",\n  MAX(CASE WHEN offspring=100 THEN mutation_rate END) AS \"n=100\"\nFROM (SELECT target_length, offspring, mutation_rate FROM runs\n      WHERE batch_id = $batch AND charset_size = $k\n      GROUP BY 1,2,3 HAVING AVG(reached_target) >= 0.99)\nGROUP BY 1 ORDER BY 1;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "color-background",
+              "mode": "gradient"
+            },
+            "filterable": false
+          },
+          "color": {
+            "mode": "continuous-RdYlGr"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "L"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "title": "Total evaluations vs offspring (each at its best m)",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Offspring x generations = total fitness evaluations. Minimises around n=25.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 21
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT CAST(offspring AS TEXT) AS \"n\", MIN(w) AS \"evaluations\"\nFROM (SELECT offspring, AVG(generations)*offspring w FROM runs\n      WHERE batch_id = $batch AND target_length = $L AND charset_size = $k\n      GROUP BY offspring, mutation_rate HAVING AVG(reached_target) = 1.0)\nGROUP BY 1 ORDER BY CAST(\"n\" AS INTEGER);",
+          "rawQueryText": "SELECT CAST(offspring AS TEXT) AS \"n\", MIN(w) AS \"evaluations\"\nFROM (SELECT offspring, AVG(generations)*offspring w FROM runs\n      WHERE batch_id = $batch AND target_length = $L AND charset_size = $k\n      GROUP BY offspring, mutation_rate HAVING AVG(reached_target) = 1.0)\nGROUP BY 1 ORDER BY CAST(\"n\" AS INTEGER);",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "xField": "n",
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "Generations distribution (one cell)",
+      "type": "histogram",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Raw per-run generation counts for the selected L/k/n/m. Right-skewed near the threshold.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT generations AS \"generations\" FROM runs\nWHERE batch_id = $batch AND target_length = $L AND charset_size = $k\n  AND offspring = $n AND mutation_rate = $m AND reached_target = 1;",
+          "rawQueryText": "SELECT generations AS \"generations\" FROM runs\nWHERE batch_id = $batch AND target_length = $L AND charset_size = $k\n  AND offspring = $n AND mutation_rate = $m AND reached_target = 1;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "bucketOffset": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 1
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "title": "Regressions vs mutation rate",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Fitness drops (parent does not compete). Zero in the safe regime, then explodes \u2014 a sharp threshold detector.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT CAST(mutation_rate AS TEXT) AS \"m\", ROUND(AVG(regressions),2) AS \"avg regressions\"\nFROM runs WHERE batch_id = $batch AND target_length = $L AND charset_size = $k AND offspring = $n\nGROUP BY 1 ORDER BY CAST(\"m\" AS REAL);",
+          "rawQueryText": "SELECT CAST(mutation_rate AS TEXT) AS \"m\", ROUND(AVG(regressions),2) AS \"avg regressions\"\nFROM runs WHERE batch_id = $batch AND target_length = $L AND charset_size = $k AND offspring = $n\nGROUP BY 1 ORDER BY CAST(\"m\" AS REAL);",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "xField": "m",
+        "orientation": "auto",
+        "showValue": "auto",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "title": "Generations vs target length",
+      "type": "barchart",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Each n at its own best m. Switch to an XY chart with log axes to see the L^1.26 power law as a straight line.",
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 30
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT CAST(target_length AS TEXT) AS \"L\",\n  MIN(CASE WHEN offspring=5 THEN g END) AS \"n=5\",\n  MIN(CASE WHEN offspring=25 THEN g END) AS \"n=25\",\n  MIN(CASE WHEN offspring=100 THEN g END) AS \"n=100\"\nFROM (SELECT target_length, offspring, AVG(generations) g FROM runs\n      WHERE batch_id = $batch AND charset_size = $k\n      GROUP BY 1,2,mutation_rate HAVING AVG(reached_target) = 1.0)\nGROUP BY 1 ORDER BY CAST(\"L\" AS INTEGER);",
+          "rawQueryText": "SELECT CAST(target_length AS TEXT) AS \"L\",\n  MIN(CASE WHEN offspring=5 THEN g END) AS \"n=5\",\n  MIN(CASE WHEN offspring=25 THEN g END) AS \"n=25\",\n  MIN(CASE WHEN offspring=100 THEN g END) AS \"n=100\"\nFROM (SELECT target_length, offspring, AVG(generations) g FROM runs\n      WHERE batch_id = $batch AND charset_size = $k\n      GROUP BY 1,2,mutation_rate HAVING AVG(reached_target) = 1.0)\nGROUP BY 1 ORDER BY CAST(\"L\" AS INTEGER);",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "xField": "L",
+        "orientation": "auto",
+        "showValue": "never",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom",
+          "calcs": []
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 80
+          },
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "title": "Slowest fully-converged combinations",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "efynlx1fliygwb"
+      },
+      "description": "Only cells where all runs converged, so the mean is trustworthy.",
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "frser-sqlite-datasource",
+            "uid": "efynlx1fliygwb"
+          },
+          "queryText": "SELECT target_length AS \"L\", charset_size AS \"k\", offspring AS \"n\", mutation_rate AS \"m\",\n       ROUND(AVG(generations),1) AS \"avg gens\", MAX(generations) AS \"worst\"\nFROM runs WHERE batch_id = $batch\nGROUP BY 1,2,3,4 HAVING AVG(reached_target) = 1.0\nORDER BY AVG(generations) DESC LIMIT 20;",
+          "rawQueryText": "SELECT target_length AS \"L\", charset_size AS \"k\", offspring AS \"n\", mutation_rate AS \"m\",\n       ROUND(AVG(generations),1) AS \"avg gens\", MAX(generations) AS \"worst\"\nFROM runs WHERE batch_id = $batch\nGROUP BY 1,2,3,4 HAVING AVG(reached_target) = 1.0\nORDER BY AVG(generations) DESC LIMIT 20;",
+          "timeColumns": [
+            "time",
+            "ts"
+          ],
+          "queryType": "table"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false
+          }
+        },
+        "overrides": []
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "batch",
+        "label": "Batch",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "efynlx1fliygwb"
+        },
+        "query": "SELECT id FROM batches ORDER BY id DESC;",
+        "definition": "SELECT id FROM batches ORDER BY id DESC;",
+        "refresh": 1,
+        "sort": 3,
+        "current": {
+          "selected": true,
+          "text": "1",
+          "value": "1"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0
+      },
+      {
+        "name": "L",
+        "label": "Target length (L)",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "efynlx1fliygwb"
+        },
+        "query": "SELECT DISTINCT target_length FROM runs ORDER BY 1;",
+        "definition": "SELECT DISTINCT target_length FROM runs ORDER BY 1;",
+        "refresh": 1,
+        "sort": 3,
+        "current": {
+          "selected": true,
+          "text": "28",
+          "value": "28"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0
+      },
+      {
+        "name": "k",
+        "label": "Charset size (k)",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "efynlx1fliygwb"
+        },
+        "query": "SELECT DISTINCT charset_size FROM runs ORDER BY 1;",
+        "definition": "SELECT DISTINCT charset_size FROM runs ORDER BY 1;",
+        "refresh": 1,
+        "sort": 3,
+        "current": {
+          "selected": true,
+          "text": "27",
+          "value": "27"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0
+      },
+      {
+        "name": "n",
+        "label": "Offspring (n)",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "efynlx1fliygwb"
+        },
+        "query": "SELECT DISTINCT offspring FROM runs ORDER BY 1;",
+        "definition": "SELECT DISTINCT offspring FROM runs ORDER BY 1;",
+        "refresh": 1,
+        "sort": 3,
+        "current": {
+          "selected": true,
+          "text": "100",
+          "value": "100"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0
+      },
+      {
+        "name": "m",
+        "label": "Mutation rate (m)",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "efynlx1fliygwb"
+        },
+        "query": "SELECT DISTINCT mutation_rate FROM runs ORDER BY 1;",
+        "definition": "SELECT DISTINCT mutation_rate FROM runs ORDER BY 1;",
+        "refresh": 1,
+        "sort": 3,
+        "current": {
+          "selected": true,
+          "text": "0.05",
+          "value": "0.05"
+        },
+        "options": [],
+        "multi": false,
+        "includeAll": false,
+        "hide": 0
+      }
+    ]
+  }
+}
